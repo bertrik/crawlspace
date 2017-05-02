@@ -7,6 +7,7 @@
  * - WifiManager
  * - PubSubClient
  * - pololu VL53L0X library
+ * - NTPClient
  */
 
 #include <stdbool.h>
@@ -19,6 +20,7 @@
 #include <PubSubClient.h>
 #include <Wire.h>
 #include <VL53L0X.h>
+#include <NTPClient.h>
 
 // measurement period (seconds)
 #define PERIOD          60
@@ -56,6 +58,8 @@ static WiFiManager wifiManager;
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static VL53L0X lidar;
+static WiFiUDP udp;
+static NTPClient ntpClient(udp, NTP_HOST);
 
 static void print(const char *fmt, ...)
 {
@@ -80,44 +84,15 @@ static bool step_connect_wifi(meas_t *meas)
 
 static bool step_request_sntp(meas_t *meas)
 {
-    WiFiUDP udp;
+    bool result;
 
-    // prepare NTP packet
-    uint8_t buf[48];
-    memset(buf, 0, sizeof(buf));
-    buf[0] = 0b11100011;   // LI, Version, Mode
-    buf[1] = 0;     // Stratum, or type of clock
-    buf[2] = 6;     // Polling Interval
-    buf[3] = 0xEC;  // Peer Clock Precision
-    // 8 bytes of zero for Root Delay & Root Dispersion
-
-    // send it
-    udp.begin(NTP_LOCALPORT);
-    udp.beginPacket(NTP_HOST, NTP_PORT); //NTP requests are to port 123
-    udp.write(buf, sizeof(buf));
-    udp.endPacket();
-    
-    // wait for response
-    int cb;
-    unsigned long start = millis();
-    while ((cb = udp.parsePacket()) <= 0) {
-        if ((millis() - start) > NTP_TIMEOUT) {
-            print("SNTP timeout!\n");
-            return false;
-        }
-        delay(10);
+    ntpClient.begin();
+    result = ntpClient.forceUpdate();
+    if (result) {
+        meas->time = ntpClient.getEpochTime();
     }
 
-    // decode response
-    udp.read(buf, sizeof(buf));
-    unsigned long highWord = word(buf[40], buf[41]);
-    unsigned long lowWord = word(buf[42], buf[43]);
-    unsigned long secsSince1900 = highWord << 16 | lowWord;
-
-    // convert to seconds since 1970-1-1 00:00:00
-    meas->time = secsSince1900 - 2208988800UL;
-    print("%u s", meas->time);
-    return true;
+    return result;
 }
 
 static bool step_prepare_lidar(meas_t *meas)
