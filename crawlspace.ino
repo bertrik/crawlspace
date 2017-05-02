@@ -90,6 +90,7 @@ static bool step_request_sntp(meas_t *meas)
     result = ntpClient.forceUpdate();
     if (result) {
         meas->time = ntpClient.getEpochTime();
+        print("%u s", meas->time);
     }
 
     return result;
