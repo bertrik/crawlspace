@@ -21,10 +21,14 @@
 #include <Wire.h>
 #include <VL53L0X.h>
 #include <NTPClient.h>
+#include "dht11.h"
 
 // measurement period (seconds)
 #define PERIOD          60
 #define PIN_SHUT        D3
+#define PIN_DHT_GND     D5
+#define PIN_DHT_DAT     D6
+#define PIN_DHT_VCC     D7
 
 #define MQTT_HOST       "aliensdetected.com"
 #define MQTT_PORT       1883
@@ -60,6 +64,7 @@ static PubSubClient mqttClient(wifiClient);
 static VL53L0X lidar;
 static WiFiUDP udp;
 static NTPClient ntpClient(udp, NTP_HOST);
+static DHT11 dht11(PIN_DHT_DAT);
 
 static void print(const char *fmt, ...)
 {
@@ -111,10 +116,16 @@ static bool step_measure_range(meas_t *meas)
 
 static bool step_measure_temp_hum(meas_t *meas)
 {
-    // TODO to be implemented
-    meas->humidity = 0;
-    meas->temperature = 0;
-    return true;
+    int temp, humi;
+    bool result;
+
+    result = dht11.read(&humi, &temp);
+    if (result) {
+        meas->temperature = temp;
+        meas->humidity = humi;
+        print("%d%% / %d*C", humi, temp);
+    }
+    return result;
 }
 
 static bool step_publish_mqtt(meas_t *meas)
@@ -157,18 +168,23 @@ static step_t steps[] = {
     { "Retrieving time (SNTP)",     step_request_sntp },
     { "Preparing LIDAR",            step_prepare_lidar },
     { "Measuring range",            step_measure_range },
-    { "Measuring temp/humidity",    step_measure_temp_hum },
+    { "Measuring humidity/temp",    step_measure_temp_hum },
     { "Publishing to MQTT",         step_publish_mqtt },
     { "Entering deep sleep",        step_deep_sleep }
 };
 
 void setup(void)
 {
+    Serial.begin(115200);
+
     // keep RESET de-asserted
     pinMode(D0, INPUT_PULLUP);
     
-    Serial.begin(115200);
-    print("\nCrawlspace sensor\n");
+    // configure DHT power
+    pinMode(PIN_DHT_GND, OUTPUT);
+    digitalWrite(PIN_DHT_GND, LOW);
+    pinMode(PIN_DHT_VCC, OUTPUT);
+    digitalWrite(PIN_DHT_VCC, HIGH);
 
     // wake up the LIDAR
     pinMode(PIN_SHUT, OUTPUT);
@@ -178,8 +194,12 @@ void setup(void)
     lidar.init();
     lidar.setTimeout(500);
 
+    // init DHT11
+    dht11.init();
+
     step = steps;
     memset(&measurement, 0, sizeof(measurement));
+    print("\nCrawlspace sensor\n");
 }
 
 void loop(void)
