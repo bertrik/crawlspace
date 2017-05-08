@@ -1,7 +1,7 @@
 /**
  * ESP8266 application for monitoring temperature, humidity and water level in the crawl space under a house.
  *
- * See also https://github.com/bertrik/crawlspace
+ * See also https://revspace.nl/CrawlSpaceSensor
  *
  * Dependencies:
  * - WifiManager
