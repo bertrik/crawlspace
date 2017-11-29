@@ -1,2 +1,4 @@
 # crawlspace
-Arduino project for monitoring water level, temperature, humidity in the crawl space under a house
+Arduino project for monitoring water level, temperature, humidity in the crawl space under a house.
+
+See https://revspace.nl/CrawlSpaceSensor
